@@ -1,0 +1,77 @@
+Option Explicit
+
+Sub ImportCSVsFromSelectedFolder_UTF8()
+    Dim folderPath As String, fileName As String
+    Dim wbMST As Workbook
+    Dim shName As String, baseName As String
+    Dim ws As Worksheet
+    
+    ' Let user pick the folder
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        .Title = "Select Folder Containing CSV Files"
+        .AllowMultiSelect = False
+        If .Show <> -1 Then Exit Sub ' User cancelled
+        folderPath = .SelectedItems(1)
+    End With
+    
+    ' Ensure path ends with backslash
+    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+    
+    Set wbMST = ThisWorkbook
+    
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
+    fileName = Dir(folderPath & "*.csv")
+    If Len(fileName) = 0 Then
+        Application.DisplayAlerts = True
+        Application.ScreenUpdating = True
+        MsgBox "No CSV files found in the selected folder.", vbExclamation
+        Exit Sub
+    End If
+    
+    Do While Len(fileName) > 0
+        baseName = Left$(fileName, InStrRev(fileName, ".") - 1)
+        shName = CleanSheetName(baseName)
+        
+        ' Delete sheet if it already exists
+        On Error Resume Next
+        wbMST.Worksheets(shName).Delete
+        On Error GoTo 0
+        
+        ' Add new sheet
+        Set ws = wbMST.Sheets.Add(After:=wbMST.Sheets(wbMST.Sheets.Count))
+        ws.Name = shName
+        
+        ' Import CSV as UTF-8
+        With ws.QueryTables.Add(Connection:="TEXT;" & folderPath & fileName, Destination:=ws.Range("A1"))
+            .TextFilePlatform = 65001 ' UTF-8
+            .TextFileParseType = xlDelimited
+            .TextFileCommaDelimiter = True
+            .TextFileTrailingMinusNumbers = True
+            .AdjustColumnWidth = True
+            .Refresh BackgroundQuery:=False
+        End With
+        
+        fileName = Dir()
+    Loop
+    
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    
+    MsgBox "All CSV files have been imported (UTF-8 Thai supported).", vbInformation
+End Sub
+
+Private Function CleanSheetName(ByVal s As String) As String
+    Dim badChars As Variant, i As Long
+    badChars = Array("[", "]", ":", "*", "?", "/", "\", "'")
+    For i = LBound(badChars) To UBound(badChars)
+        s = Replace$(s, badChars(i), "_")
+    Next
+    s = Replace$(s, Chr$(34), "_") ' double-quote
+    s = Trim$(s)
+    If Len(s) = 0 Then s = "Sheet"
+    If Len(s) > 31 Then s = Left$(s, 31)
+    CleanSheetName = s
+End Function
+
